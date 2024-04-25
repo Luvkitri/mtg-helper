@@ -1,6 +1,7 @@
 import math
 import re
 
+from multiprocessing import cpu_count, Pool
 from typing import List, Tuple
 from dataclasses import dataclass
 from bson.objectid import ObjectId
@@ -31,7 +32,7 @@ class Card:
 
 def tokenize(text: str) -> List[str]:
     pattern = r"\b[^\s{}()]+\b|{\w+}"
-    return re.findall(pattern, text)
+    return re.findall(pattern, text.lower())
 
 
 def parse_card_text(text: str) -> Terms:
@@ -44,6 +45,8 @@ def parse_card_text(text: str) -> Terms:
             continue
 
         terms[token] = [index]
+
+    return terms
 
 
 def generate_card_index(card_id: ObjectId, terms: Terms) -> CardIndex:
@@ -69,11 +72,38 @@ def mapper(card: Card):
         return None
 
 
+def reducer(card_indices):
+    inverted_index = {}
+
+    for card_index in card_indices:
+        for term, postings in card_index.items():
+            if term in inverted_index:
+                inverted_index[term].append(postings)
+                continue
+
+            inverted_index[term] = [postings]
+
+    return inverted_index
+
+
+def generate(data_iter):
+    cores = cpu_count() - 1
+
+    with Pool(processes=cores) as pool:
+        results = pool.map_async(func=mapper, iterable=data_iter).get()
+        inverted_index = reducer(documents_indices=[result[0] for result in results])
+        cards_info = {result[1][0]: result[1][1] for result in results}
+        pool.close()
+        pool.join()
+
+    return inverted_index, cards_info
+
+
 class Indexer:
     def __init__(self, inverted_index, cards_info):
         self.inverted_index = inverted_index
         self.cards_info = cards_info
-        self.total_number_of_cards = 20_000
+        self.total_number_of_cards = 4
 
     def calculate_TFIDF_weight(self, term_frequency: int, card_frequency: int):
         return (1 + math.log2(term_frequency)) * math.log2(
@@ -108,7 +138,7 @@ class Indexer:
                     card_weights[card_id].append((source_term_weight, card_term_weight))
                     continue
 
-                card_weights = [(source_term_weight, card_term_weight)]
+                card_weights[card_id] = [(source_term_weight, card_term_weight)]
 
         similarity_scores = {}
         for card_id, card_weights in card_weights.items():

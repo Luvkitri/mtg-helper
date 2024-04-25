@@ -4,6 +4,9 @@ from pprint import pprint
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
+from indexer import Indexer, generate
+from bson.objectid import ObjectId
+
 
 def main():
     # Get envs
@@ -21,6 +24,10 @@ def main():
     database = mongo_client.get_database("mtg_cards")
     collection = database.get_collection("cards")
 
+    inverted_index, cards_info = generate(TEST_DATA)
+    indexer = Indexer(inverted_index, cards_info)
+    results = indexer.retrieve({"_id": ObjectId(), "text": "to do"})
+    print(results)
     # card_texts_cursor = collection.find({}, {"text": 1})
     # mtg_helper = MTGHelper()
     # mtg_helper.get_card_text_similarity(
