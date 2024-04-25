@@ -20,7 +20,7 @@ class Terms:
 @dataclass
 class CardIndex:
     term: str
-    posting: Tuple[ObjectId, int]  # Posting
+    posting: List[Tuple[ObjectId, int]]  # Posting
 
 
 @dataclass
@@ -52,7 +52,7 @@ def generate_card_index(card_id: ObjectId, terms: Terms) -> CardIndex:
     for term, positions in terms.items():
         posting = (card_id, len(positions))
 
-        card_index[term] = posting
+        card_index[term].append(posting)
 
     return card_index
 
@@ -75,21 +75,50 @@ class Indexer:
         self.cards_info = cards_info
         self.total_number_of_cards = 20_000
 
-    def calculate_TFIDF_weight(self, term_frequency, card_frequency):
-        return 1 + math.log(term_frequency) * math.log(
+    def calculate_TFIDF_weight(self, term_frequency: int, card_frequency: int):
+        return (1 + math.log2(term_frequency)) * math.log2(
             self.total_number_of_cards / card_frequency
         )
 
     def retrieve(self, source_card: Card):
         source_card_terms = parse_card_text(source_card.text)
 
-        degrees_of_similarity = {}
+        card_weights = {}
 
-        for source_card_term in source_card_terms:
+        # TODO ADD (source_term_weight, 0) if some card_id is missing it or figure out how to do it better
+
+        for source_card_term, indicies in source_card_terms.items():
             if source_card_term not in self.inverted_index:
                 print("Somehow card term is not in inverted index")
 
             term_postings = self.inverted_index[source_card_term]
+            card_frequency = len(term_postings)
 
-            for post in term_postings:
-                pass
+            source_term_weight = self.calculate_TFIDF_weight(
+                len(indicies), card_frequency
+            )
+
+            for posting in term_postings:
+                card_id, term_frequency = posting
+                card_term_weight = self.calculate_TFIDF_weight(
+                    term_frequency, len(term_postings), self.total_number_of_cards
+                )
+
+                if card_id in card_weights:
+                    card_weights[card_id].append((source_term_weight, card_term_weight))
+                    continue
+
+                card_weights = [(source_term_weight, card_term_weight)]
+
+        similarity_scores = {}
+        for card_id, card_weights in card_weights.items():
+            sum1 = 0
+            sum2 = 0
+            sum3 = 0
+
+            for source_weight, card_weight in card_weights:
+                sum1 += source_weight * card_weight
+                sum2 += source_weight**2
+                sum3 += card_weight**2
+
+            similarity_scores[card_id] = sum1 / math.sqrt(sum2) * math.sqrt(sum3)
