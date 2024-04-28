@@ -54,18 +54,16 @@ def generate_card_index(card_id: ObjectId, terms: Terms) -> CardIndex:
 
     for term, positions in terms.items():
         posting = (card_id, len(positions))
-
-        card_index[term].append(posting)
+        card_index[term] = posting
 
     return card_index
 
 
 def mapper(card: Card):
     try:
-        terms = parse_card_text(card.text)
-        card_info = (card._id, len(terms))
-        card_index = generate_card_index(card._id, terms)
-        return (card_info, card_index)
+        terms = parse_card_text(card["text"])
+        card_index = generate_card_index(card["_id"], terms)
+        return card_index
     except Exception as error:
         # just in case i guess
         print(error)
@@ -86,23 +84,21 @@ def reducer(card_indices):
     return inverted_index
 
 
-def generate(data_iter):
+def generate_inverted_index(data_iter):
     cores = cpu_count() - 1
 
     with Pool(processes=cores) as pool:
         results = pool.map_async(func=mapper, iterable=data_iter).get()
-        inverted_index = reducer(documents_indices=[result[0] for result in results])
-        cards_info = {result[1][0]: result[1][1] for result in results}
+        inverted_index = reducer(card_indices=results)
         pool.close()
         pool.join()
 
-    return inverted_index, cards_info
+    return inverted_index
 
 
 class Indexer:
-    def __init__(self, inverted_index, cards_info):
+    def __init__(self, inverted_index):
         self.inverted_index = inverted_index
-        self.cards_info = cards_info
         self.total_number_of_cards = 4
 
     def calculate_TFIDF_weight(self, term_frequency: int, card_frequency: int):
@@ -111,9 +107,10 @@ class Indexer:
         )
 
     def retrieve(self, source_card: Card):
-        source_card_terms = parse_card_text(source_card.text)
+        source_card_terms = parse_card_text(source_card["text"])
 
-        card_weights = {}
+        cards = {}
+        query_weights = {}
 
         # TODO ADD (source_term_weight, 0) if some card_id is missing it or figure out how to do it better
 
@@ -128,27 +125,45 @@ class Indexer:
                 len(indicies), card_frequency
             )
 
+            query_weights[source_card_term] = source_term_weight
+
             for posting in term_postings:
                 card_id, term_frequency = posting
+
                 card_term_weight = self.calculate_TFIDF_weight(
-                    term_frequency, len(term_postings), self.total_number_of_cards
+                    term_frequency, len(term_postings)
                 )
 
-                if card_id in card_weights:
-                    card_weights[card_id].append((source_term_weight, card_term_weight))
+                if card_id in cards:
+                    cards[card_id].append(
+                        (source_card_term, source_term_weight, card_term_weight)
+                    )
                     continue
 
-                card_weights[card_id] = [(source_term_weight, card_term_weight)]
+                cards[card_id] = [
+                    (source_card_term, source_term_weight, card_term_weight)
+                ]
 
         similarity_scores = {}
-        for card_id, card_weights in card_weights.items():
+        for card_id, card_weights_data in cards.items():
             sum1 = 0
             sum2 = 0
             sum3 = 0
 
-            for source_weight, card_weight in card_weights:
-                sum1 += source_weight * card_weight
-                sum2 += source_weight**2
-                sum3 += card_weight**2
+            present_terms = []
+            for card_data in card_weights_data:
+                source_card_term, source_term_weight, card_term_weight = card_data
+                present_terms.append(source_card_term)
+
+                print(f"{source_term_weight} * {card_term_weight} +", end="")
+                sum1 += source_term_weight * card_term_weight
+                sum2 += source_term_weight**2
+                sum3 += card_term_weight**2
+
+            for term, query_weight in query_weights.items():
+                if term not in present_terms:
+                    sum3 += query_weight
 
             similarity_scores[card_id] = sum1 / math.sqrt(sum2) * math.sqrt(sum3)
+
+        return similarity_scores
