@@ -127,7 +127,33 @@ def test_generate_card_index(card_id, terms, expected):
                     "da": [("d4", 3)],
                     "let": [("d4", 2)],
                     "it": [("d4", 2)],
-                }
+                },
+                {
+                    "d1": {
+                        "to": 4,
+                        "do": 2,
+                        "is": 2,
+                        "be": 2,
+                    },
+                    "d2": {
+                        "to": 2,
+                        "be": 2,
+                        "or": 1,
+                        "not": 1,
+                        "i": 2,
+                        "am": 2,
+                        "what": 1,
+                    },
+                    "d3": {
+                        "do": 3,
+                        "be": 2,
+                        "i": 2,
+                        "am": 1,
+                        "think": 1,
+                        "therefore": 1,
+                    },
+                    "d4": {"do": 3, "be": 2, "da": 3, "let": 2, "it": 2},
+                },
             ),
         ),
     ),
@@ -153,6 +179,6 @@ def test_generate_inverted_index(data_iter, expected):
     ),
 )
 def test_retrieval(query, expected):
-    inverted_index = generate_inverted_index(GENERIC_TEST_DATA)
-    indexer = Indexer(inverted_index)
+    inverted_index, cards_frequencies = generate_inverted_index(GENERIC_TEST_DATA)
+    indexer = Indexer(inverted_index, cards_frequencies)
     assert indexer.retrieve(query) == expected
