@@ -75,7 +75,6 @@ def mapper(card: Card):
         card_index = generate_card_index(card["_id"], terms)
         return (card_index, card_frequencies)
     except Exception as error:
-        print(error)
         return None
 
 
@@ -95,11 +94,14 @@ def reducer(card_indices):
 
 def generate_inverted_index(data_iter):
     cores = cpu_count() - 1
+    print(f"Running on {cores} processes...")
 
     with Pool(processes=cores) as pool:
         results = pool.map_async(func=mapper, iterable=data_iter).get()
-        inverted_index = reducer(card_indices=[result[0] for result in results])
-        cards_frequencies = {result[1][0]: result[1][1] for result in results}
+        inverted_index = reducer(
+            card_indices=[result[0] for result in results if result]
+        )
+        cards_frequencies = {result[1][0]: result[1][1] for result in results if result}
 
         pool.close()
         pool.join()
@@ -151,6 +153,9 @@ class Indexer:
         cards_data = {}
 
         for source_card_term, indicies in source_card_terms.items():
+            if source_card_term not in self.inverted_index:
+                print(f"Missing {source_card_term}")
+                continue
             term_postings = self.inverted_index[source_card_term]
             card_frequency = len(term_postings)
 
@@ -172,4 +177,4 @@ class Indexer:
                 cards_data[card_id] = [(source_term_weight, card_term_weight)]
 
         similarity_scores = self.calculate_similarity_scores(cards_data)
-        return dict(sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True))
+        return sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True)[:10]

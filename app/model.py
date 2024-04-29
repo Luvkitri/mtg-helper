@@ -4,7 +4,7 @@ from pprint import pprint
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
-from indexer import Indexer, generate
+from indexer import Indexer, generate_inverted_index
 from bson.objectid import ObjectId
 
 
@@ -23,11 +23,7 @@ def main():
     )
     database = mongo_client.get_database("mtg_cards")
     collection = database.get_collection("cards")
-
-    inverted_index, cards_info = generate(TEST_DATA)
-    indexer = Indexer(inverted_index, cards_info)
-    results = indexer.retrieve({"_id": ObjectId(), "text": "to do"})
-    print(results)
+    # indexer.retrieve()
     # card_texts_cursor = collection.find({}, {"text": 1})
     # mtg_helper = MTGHelper()
     # mtg_helper.get_card_text_similarity(
@@ -41,16 +37,21 @@ def main():
     #     pprint.pprint(sol_ring)
     # print(tokenize(sol_ring["text"]))
 
-    # Test data
-    # cards_cursor = collection.find({}, {"text": 1}).limit(10)
+    # Test
+    cards_cursor = collection.find({}, {"text": 1})
 
-    # termsets = []
-    # for card in cards_cursor:
-    #     card_id = card["_id"]
-    #     terms = tokenize(card["text"])
-    #     for term in terms:
-    #         print(term)
+    inverted_index, cards_frequencies = generate_inverted_index(cards_cursor)
+    indexer = Indexer(inverted_index, cards_frequencies)
 
+    # Source
+    sol_ring = collection.find_one({"name": "Sol Ring"}, {"text": 1})
+    pprint(sol_ring)
+    sim_scores = indexer.retrieve(sol_ring)
+    results = collection.find(
+        {"_id": {"$in": [result for (result, _) in sim_scores]}}, {"name": 1, "text": 1}
+    )
+    for result in results:
+        pprint(result)
     mongo_client.close()
 
 
