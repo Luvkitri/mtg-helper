@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 from pymongo import MongoClient
 
 from indexer import Indexer, generate_inverted_index
-from bson.objectid import ObjectId
 
 
 def main():

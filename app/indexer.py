@@ -1,6 +1,7 @@
 import math
 import re
 
+from motor.motor_asyncio import AsyncIOMotorCursor
 from multiprocessing import cpu_count, Pool
 from typing import List, Tuple
 from dataclasses import dataclass
@@ -92,7 +93,30 @@ def reducer(card_indices):
     return inverted_index
 
 
-def generate_inverted_index(data_iter):
+# async def generate_inverted_index(cursor: AsyncIOMotorCursor):
+#     cores = cpu_count() - 1
+#     print(f"Running on {cores} processes...")
+
+#     with Pool(processes=cores) as pool:
+#         results = pool.starmap_async(func=mapper, iterable=cursor_data_fetcher(cursor))
+#         inverted_index_data = []
+#         async for result in results:
+#             inverted_index_data.append(await result)
+#         # results = pool.map_async(func=mapper, iterable=data_iter).get()
+#         inverted_index = reducer(
+#             card_indices=[data[0] for data in inverted_index_data if data]
+#         )
+#         cards_frequencies = {
+#             data[1][0]: data[1][1] for data in inverted_index_data if data
+#         }
+
+#         pool.close()
+#         pool.join()
+
+#     return inverted_index, cards_frequencies
+
+
+async def generate_inverted_index(data_iter):
     cores = cpu_count() - 1
     print(f"Running on {cores} processes...")
 
