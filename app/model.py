@@ -65,6 +65,7 @@ def main():
     trie = Trie()
     trie.append("Ala ma kota, a kot ma Ale".split(" "))
     print(trie.root)
+    print(trie.auto_complete("a"))
 
 
 if __name__ == "__main__":
