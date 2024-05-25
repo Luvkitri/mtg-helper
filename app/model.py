@@ -43,7 +43,7 @@ def main():
     # # indexer = Indexer(inverted_index, cards_frequencies)
 
     # # Source
-    # sol_ring = collection.find_one(
+    # sol_ring = collection.find_one
     #     {"name": "Shu Yun, the Silent Tempest"},
     #     {
     #         "colors": 1,

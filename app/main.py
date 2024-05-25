@@ -6,6 +6,7 @@ from typing_extensions import Annotated
 from bson import json_util
 import json
 
+from autocomplete import Trie
 from constants import DB_NAME, CARDS_COLLECTION_NAME, MONGO_URL
 from db.client import get_database
 from indexer import Indexer, generate_inverted_index
@@ -16,9 +17,14 @@ lifespans = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db_client = AsyncIOMotorClient(MONGO_URL)
+
     db_client[DB_NAME][CARDS_COLLECTION_NAME].create_index([("name", "text")])
+
     cards_cursor = db_client[DB_NAME][CARDS_COLLECTION_NAME].find({}, {"text": 1})
     cards = await cards_cursor.to_list(length=None)
+
+    cards_names_trie = Trie()
+    cards_names_trie.append([card["name"] for card in cards])
     inverted_index, cards_frequencies = await generate_inverted_index(cards)
     indexer = Indexer(inverted_index, cards_frequencies)
     lifespans["db_client"] = db_client

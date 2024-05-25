@@ -56,14 +56,14 @@ class Trie:
 
         node.is_terminal = True
 
-    def _get_matches(self, node, prefix, matches):
+    def _walk_trie(self, node, prefix, matches):
         if node.children:
             for character in node.children:
                 new_word = prefix + character
                 if node.children[character].is_terminal:
                     matches.append(new_word)
 
-                self._get_matches(node.children[character], new_word, matches)
+                self._walk_trie(node.children[character], new_word, matches)
 
     def auto_complete(self, prefix):
         node = self.root
