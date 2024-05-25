@@ -20,15 +20,22 @@ async def lifespan(app: FastAPI):
 
     db_client[DB_NAME][CARDS_COLLECTION_NAME].create_index([("name", "text")])
 
-    cards_cursor = db_client[DB_NAME][CARDS_COLLECTION_NAME].find({}, {"text": 1})
+    cards_cursor = db_client[DB_NAME][CARDS_COLLECTION_NAME].find(
+        {}, {"name": 1, "text": 1}
+    )
     cards = await cards_cursor.to_list(length=None)
 
+    card_name_to_upper = {card["name"].lower(): card["name"] for card in cards}
     cards_names_trie = Trie()
-    cards_names_trie.append([card["name"] for card in cards])
+    cards_names_trie.append(card_name_to_upper.values())
+
     inverted_index, cards_frequencies = await generate_inverted_index(cards)
     indexer = Indexer(inverted_index, cards_frequencies)
+
     lifespans["db_client"] = db_client
     lifespans["indexer"] = indexer
+    lifespans["cards_names_trie"] = cards_names_trie
+    lifespans["card_name_to_upper"] = card_name_to_upper
     yield
     db_client.close()
     lifespans.clear()
@@ -128,15 +135,8 @@ async def get_cards(
 async def get_completations(q: str | None = None):
     if not q:
         return []
-    search_query = q
-    if " " in search_query:
-        search_query = '"{}"'.format(search_query)
 
-    cards_search_cursor = (
-        lifespans["db_client"][DB_NAME][CARDS_COLLECTION_NAME]
-        .find({"$text": {"$search": search_query}}, {"_id": 0, "name": 1})
-        .sort({"score": {"$meta": "textScore"}})
-        .limit(10)
-    )
-    cards = await cards_search_cursor.to_list(length=None)
-    return cards
+    search_query = q.lower()
+
+    results = lifespans["cards_names_trie"].auto_complete(search_query)
+    return [lifespans["card_name_to_upper"][match] for match in results]

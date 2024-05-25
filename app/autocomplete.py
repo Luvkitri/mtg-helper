@@ -73,12 +73,19 @@ class Trie:
             if character in node.children:
                 node = node.children[character]
             else:
+                print("Not in node")
                 return matches
 
         # Every character matches
         if node.is_terminal:
             matches.append(prefix)
 
-        self._get_matches(node, prefix, matches)
+        self._walk_trie(node, prefix, matches)
 
         return matches
+
+    def __str__(self):
+        return f"{self.root.children.keys()}"
+
+    def __repr__(self):
+        return f"{self.root.children.keys()}"
