@@ -6,7 +6,7 @@ from typing_extensions import Annotated
 from bson import json_util
 import json
 
-from autocomplete import Trie
+from autocomplete import Trie, levenshtein_distance
 from constants import DB_NAME, CARDS_COLLECTION_NAME, MONGO_URL
 from db.client import get_database
 from indexer import Indexer, generate_inverted_index
@@ -133,10 +133,13 @@ async def get_cards(
 
 @app.get("/autocomplete/cards")
 async def get_completations(q: str | None = None):
-    if not q:
+    if not q or len(q) < 2:
         return []
 
     search_query = q.lower()
 
-    results = lifespans["cards_names_trie"].auto_complete(search_query)
-    return [lifespans["card_name_to_upper"][match] for match in results]
+    results = lifespans["cards_names_trie"].auto_complete(search_query)[:10]
+    sorted_results = sorted(
+        {result: levenshtein_distance(result, q) for result in results}
+    )
+    return [lifespans["card_name_to_upper"][match] for match in sorted_results]
