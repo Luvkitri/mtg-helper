@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing_extensions import Annotated
-from bson import json_util
+from bson import json_util, ObjectId
 import json
 
 from autocomplete import Trie, levenshtein_distance
@@ -25,9 +25,11 @@ async def lifespan(app: FastAPI):
     )
     cards = await cards_cursor.to_list(length=None)
 
-    card_name_to_upper = {card["name"].lower(): card["name"] for card in cards}
+    card_name_to_upper = {
+        card["name"].lower(): (card["_id"], card["name"]) for card in cards
+    }
     cards_names_trie = Trie()
-    cards_names_trie.append(card_name_to_upper.values())
+    cards_names_trie.append(card_data[1] for card_data in card_name_to_upper.values())
 
     inverted_index, cards_frequencies = await generate_inverted_index(cards)
     indexer = Indexer(inverted_index, cards_frequencies)
@@ -131,6 +133,54 @@ async def get_cards(
     return cards
 
 
+@app.get("/cards/{card_id}")
+async def get_card_by_id(card_id: str):
+    card = await lifespans["db_client"][DB_NAME][CARDS_COLLECTION_NAME].find_one(
+        {"_id": ObjectId(card_id)},
+        {
+            "colors": 1,
+            "colorIdentity": 1,
+            "text": 1,
+            "convertedManaCost": 1,
+            "types": 1,
+        },
+    )
+
+    print(card["colorIdentity"])
+
+    if card is None:
+        return []
+
+    sim_scores = lifespans["indexer"].retrieve(card)
+    print(sim_scores)
+    pipeline = [
+        {
+            "$match": {
+                "_id": {"$in": list(sim_scores.keys())},
+                "colorIdentity": {"$in": card["colorIdentity"]}
+                if card["colorIdentity"]
+                else [],
+            },
+        },
+        {
+            "$project": {
+                "colors": 1,
+                "colorIdentity": 1,
+                "text": 1,
+                "convertedManaCost": 1,
+                "types": 1,
+            },
+        },
+    ]
+
+    cards_cursor = lifespans["db_client"][DB_NAME][CARDS_COLLECTION_NAME].aggregate(
+        pipeline
+    )
+    cards = await cards_cursor.to_list(length=None)
+    print(cards)
+    return json.loads(json_util.dumps(cards))
+
+
 @app.get("/autocomplete/cards")
 async def get_completations(q: str | None = None):
     if not q or len(q) < 2:
@@ -142,4 +192,13 @@ async def get_completations(q: str | None = None):
     sorted_results = sorted(
         {result: levenshtein_distance(result, q) for result in results}
     )
-    return [lifespans["card_name_to_upper"][match] for match in sorted_results]
+    return json.loads(
+        json_util.dumps(
+            {
+                str(lifespans["card_name_to_upper"][match][0]): lifespans[
+                    "card_name_to_upper"
+                ][match][1]
+                for match in sorted_results
+            }
+        )
+    )
