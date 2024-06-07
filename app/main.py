@@ -146,13 +146,10 @@ async def get_card_by_id(card_id: str):
         },
     )
 
-    print(card["colorIdentity"])
-
     if card is None:
         return []
 
     sim_scores = lifespans["indexer"].retrieve(card)
-    print(sim_scores)
     pipeline = [
         {
             "$match": {
@@ -163,13 +160,7 @@ async def get_card_by_id(card_id: str):
             },
         },
         {
-            "$project": {
-                "colors": 1,
-                "colorIdentity": 1,
-                "text": 1,
-                "convertedManaCost": 1,
-                "types": 1,
-            },
+            "$project": {"identifiers": 1},
         },
     ]
 
