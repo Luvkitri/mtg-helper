@@ -4,6 +4,7 @@ from dotenv import load_dotenv
 # Get envs
 load_dotenv()
 
+# MONGODB
 MONGO_ROOT_USERNAME = os.environ.get("MONGO_INITDB_ROOT_USERNAME")
 MONGO_ROOT_PASSWORD = os.environ.get("MONGO_INITDB_ROOT_PASSWORD")
 MONGO_HOST = os.environ.get("MONGO_HOST")
@@ -15,3 +16,6 @@ MONGO_URL = "mongodb://{}:{}@{}:{}/".format(
 
 DB_NAME = "mtg_cards"
 CARDS_COLLECTION_NAME = "cards"
+
+# SQLITE
+DATABASE_URL = "../data/AllPrintings.sqlite"

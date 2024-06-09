@@ -1,45 +1,63 @@
+# import json
+import pprint
+import aiosqlite
+
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
-from motor.motor_asyncio import AsyncIOMotorClient
-from typing_extensions import Annotated
-from bson import json_util, ObjectId
-import json
 
-from autocomplete import Trie, levenshtein_distance
-from constants import DB_NAME, CARDS_COLLECTION_NAME, MONGO_URL
-from db.client import get_database
-from indexer import Indexer, generate_inverted_index
+# from typing_extensions import Annotated
+# # from bson import json_util, ObjectId
+
+# from autocomplete import Trie, levenshtein_distance
+from constants import DATABASE_URL
+# from db.client import get_database
+# from indexer import Indexer, generate_inverted_index
 
 lifespans = {}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db_client = AsyncIOMotorClient(MONGO_URL)
+    db = await aiosqlite.connect(f"{DATABASE_URL}")
 
-    db_client[DB_NAME][CARDS_COLLECTION_NAME].create_index([("name", "text")])
+    sql_query = """SELECT cards.name, identifier.scryfallId FROM cardIdentifiers as identifier INNER JOIN cards ON identifier.uuid = cards.uuid LIMIT 10;"""
+    query_card_identifiers_info = """PRAGMA table_info(cardIdentifiers);"""
+    query_cards_info = """PRAGMA table_info(cards);"""
 
-    cards_cursor = db_client[DB_NAME][CARDS_COLLECTION_NAME].find(
-        {}, {"name": 1, "text": 1}
+    cursor = await db.execute(query_cards_info)
+    rows = await cursor.fetchall()
+
+    pprint.pprint(rows, width=120)
+
+    # db_client = AsyncIOMotorClient(MONGO_URL)
+    # # db_client[DB_NAME][CARDS_COLLECTION_NAME].create_index([("name", "text")])
+    # cards_cursor = db_client[DB_NAME][CARDS_COLLECTION_NAME].find(
+    #     {}, {"name": 1, "text": 1}
+    # )
+
+    cards_cursor = await db.execute(
+        """SELECT uuid, name, text FROM cards WHERE (isFunny IS NULL OR isFunny = 0) AND (printings IS NOT 'UNF') AND name IS 'Swamp';"""
     )
-    cards = await cards_cursor.to_list(length=None)
+    cards = await cards_cursor.fetchall()
+    pprint.pprint(len(cards))
+    # cards = await cards_cursor.to_list(length=None)
+    # card_name_to_upper = {
+    #     card["name"].lower(): (card["_id"], card["name"]) for card in cards
+    # }
+    # cards_names_trie = Trie()
+    # cards_names_trie.append(card_data[1] for card_data in card_name_to_upper.values())
+    # inverted_index, cards_frequencies = await generate_inverted_index(cards)
+    # indexer = Indexer(inverted_index, cards_frequencies)
 
-    card_name_to_upper = {
-        card["name"].lower(): (card["_id"], card["name"]) for card in cards
-    }
-    cards_names_trie = Trie()
-    cards_names_trie.append(card_data[1] for card_data in card_name_to_upper.values())
-
-    inverted_index, cards_frequencies = await generate_inverted_index(cards)
-    indexer = Indexer(inverted_index, cards_frequencies)
-
-    lifespans["db_client"] = db_client
-    lifespans["indexer"] = indexer
-    lifespans["cards_names_trie"] = cards_names_trie
-    lifespans["card_name_to_upper"] = card_name_to_upper
+    lifespans["db"] = db
+    # lifespans["db_client"] = db_client
+    # lifespans["indexer"] = indexer
+    # lifespans["cards_names_trie"] = cards_names_trie
+    # lifespans["card_name_to_upper"] = card_name_to_upper
     yield
-    db_client.close()
+    await db.close()
+    # db_client.close()
     lifespans.clear()
 
 
@@ -64,141 +82,143 @@ class PaginationQueryParameters:
 
 @app.get("/")
 async def root():
-    card = await lifespans["db_client"][DB_NAME][CARDS_COLLECTION_NAME].find_one(
-        {"name": "Shu Yun, the Silent Tempest"},
-        {
-            "colors": 1,
-            "colorIdentity": 1,
-            "text": 1,
-            "convertedManaCost": 1,
-            "types": 1,
-        },
-    )
+    # card = await lifespans["db_client"][DB_NAME][CARDS_COLLECTION_NAME].find_one(
+    #     {"name": "Shu Yun, the Silent Tempest"},
+    #     {
+    #         "colors": 1,
+    #         "colorIdentity": 1,
+    #         "text": 1,
+    #         "convertedManaCost": 1,
+    #         "types": 1,
+    #     },
+    # )
 
-    sim_scores = lifespans["indexer"].retrieve(card)
-    pipeline = [
-        {
-            "$match": {
-                "_id": {"$in": list(sim_scores.keys())},
-                "colorIdentity": {"$in": card["colorIdentity"]},
-            },
-        },
-        {
-            "$project": {
-                "colors": 1,
-                "colorIdentity": 1,
-                "text": 1,
-                "convertedManaCost": 1,
-                "types": 1,
-            },
-        },
-    ]
+    # sim_scores = lifespans["indexer"].retrieve(card)
+    # pipeline = [
+    #     {
+    #         "$match": {
+    #             "_id": {"$in": list(sim_scores.keys())},
+    #             "colorIdentity": {"$in": card["colorIdentity"]},
+    #         },
+    #     },
+    #     {
+    #         "$project": {
+    #             "colors": 1,
+    #             "colorIdentity": 1,
+    #             "text": 1,
+    #             "convertedManaCost": 1,
+    #             "types": 1,
+    #         },
+    #     },
+    # ]
 
-    cards_cursor = lifespans["db_client"][DB_NAME][CARDS_COLLECTION_NAME].aggregate(
-        pipeline
-    )
-    cards = await cards_cursor.to_list(length=None)
-    return json.loads(json_util.dumps(cards))
+    # cards_cursor = lifespans["db_client"][DB_NAME][CARDS_COLLECTION_NAME].aggregate(
+    #     pipeline
+    # )
+    # cards = await cards_cursor.to_list(length=None)
+    # return json.loads(json_util.dumps(cards))
 
-
-@app.get("/cards")
-async def get_cards(
-    db: Annotated[AsyncIOMotorClient, Depends(get_database)],
-    pagination_parameters: Annotated[
-        PaginationQueryParameters, Depends(PaginationQueryParameters)
-    ],
-):
-    pipeline = [
-        {
-            "$facet": {
-                "metadata": [{"$count": "totalCount"}],
-                "data": [
-                    {
-                        "$skip": (pagination_parameters.page - 1)
-                        * pagination_parameters.limit
-                    },
-                    {"$limit": pagination_parameters.limit},
-                    {"$project": {"_id": 0}},
-                ],
-            }
-        }
-    ]
-
-    cards = (
-        await db[DB_NAME][CARDS_COLLECTION_NAME]
-        .aggregate(pipeline)
-        .to_list(length=None)
-    )
-
-    return cards
+    return None
 
 
-@app.get("/cards/{card_id}")
-async def get_card_by_id(card_id: str):
-    card = await lifespans["db_client"][DB_NAME][CARDS_COLLECTION_NAME].find_one(
-        {"_id": ObjectId(card_id)},
-        {
-            "colors": 1,
-            "colorIdentity": 1,
-            "text": 1,
-            "convertedManaCost": 1,
-            "types": 1,
-        },
-    )
+# @app.get("/cards")
+# async def get_cards(
+#     db: Annotated[AsyncIOMotorClient, Depends(get_database)],
+#     pagination_parameters: Annotated[
+#         PaginationQueryParameters, Depends(PaginationQueryParameters)
+#     ],
+# ):
+#     pipeline = [
+#         {
+#             "$facet": {
+#                 "metadata": [{"$count": "totalCount"}],
+#                 "data": [
+#                     {
+#                         "$skip": (pagination_parameters.page - 1)
+#                         * pagination_parameters.limit
+#                     },
+#                     {"$limit": pagination_parameters.limit},
+#                     {"$project": {"_id": 0}},
+#                 ],
+#             }
+#         }
+#     ]
 
-    print(card["colorIdentity"])
+#     cards = (
+#         await db[DB_NAME][CARDS_COLLECTION_NAME]
+#         .aggregate(pipeline)
+#         .to_list(length=None)
+#     )
 
-    if card is None:
-        return []
-
-    sim_scores = lifespans["indexer"].retrieve(card)
-    print(sim_scores)
-    pipeline = [
-        {
-            "$match": {
-                "_id": {"$in": list(sim_scores.keys())},
-                "colorIdentity": {"$in": card["colorIdentity"]}
-                if card["colorIdentity"]
-                else [],
-            },
-        },
-        {
-            "$project": {
-                "colors": 1,
-                "colorIdentity": 1,
-                "text": 1,
-                "convertedManaCost": 1,
-                "types": 1,
-            },
-        },
-    ]
-
-    cards_cursor = lifespans["db_client"][DB_NAME][CARDS_COLLECTION_NAME].aggregate(
-        pipeline
-    )
-    cards = await cards_cursor.to_list(length=None)
-    print(cards)
-    return json.loads(json_util.dumps(cards))
+#     return cards
 
 
-@app.get("/autocomplete/cards")
-async def get_completations(q: str | None = None):
-    if not q or len(q) < 2:
-        return []
+# @app.get("/cards/{card_id}")
+# async def get_card_by_id(card_id: str):
+#     card = await lifespans["db_client"][DB_NAME][CARDS_COLLECTION_NAME].find_one(
+#         {"_id": ObjectId(card_id)},
+#         {
+#             "colors": 1,
+#             "colorIdentity": 1,
+#             "text": 1,
+#             "convertedManaCost": 1,
+#             "types": 1,
+#         },
+#     )
 
-    search_query = q.lower()
+#     print(card["colorIdentity"])
 
-    results = lifespans["cards_names_trie"].auto_complete(search_query)[:10]
-    sorted_results = sorted(
-        {result: levenshtein_distance(result, q) for result in results}
-    )
-    return json.loads(
-        json_util.dumps(
-            {
-                str(lifespans["card_name_to_upper"][match][0]): lifespans[
-                    "card_name_to_upper"
-                ][match][1]
-                for match in sorted_results
-            }
-        )
-    )
+#     if card is None:
+#         return []
+
+#     sim_scores = lifespans["indexer"].retrieve(card)
+#     print(sim_scores)
+#     pipeline = [
+#         {
+#             "$match": {
+#                 "_id": {"$in": list(sim_scores.keys())},
+#                 "colorIdentity": {"$in": card["colorIdentity"]}
+#                 if card["colorIdentity"]
+#                 else [],
+#             },
+#         },
+#         {
+#             "$project": {
+#                 "colors": 1,
+#                 "colorIdentity": 1,
+#                 "text": 1,
+#                 "convertedManaCost": 1,
+#                 "types": 1,
+#             },
+#         },
+#     ]
+
+#     cards_cursor = lifespans["db_client"][DB_NAME][CARDS_COLLECTION_NAME].aggregate(
+#         pipeline
+#     )
+#     cards = await cards_cursor.to_list(length=None)
+#     print(cards)
+#     return json.loads(json_util.dumps(cards))
+
+
+# @app.get("/autocomplete/cards")
+# async def get_completations(q: str | None = None):
+#     if not q or len(q) < 2:
+#         return []
+
+#     search_query = q.lower()
+
+#     results = lifespans["cards_names_trie"].auto_complete(search_query)[:10]
+#     sorted_results = sorted(
+#         {result: levenshtein_distance(result, q) for result in results}
+#     )
+#     return json.loads(
+#         json_util.dumps(
+#             {
+#                 str(lifespans["card_name_to_upper"][match][0]): lifespans[
+#                     "card_name_to_upper"
+#                 ][match][1]
+#                 for match in sorted_results
+#             }
+#         )
+#     )
