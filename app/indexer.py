@@ -4,7 +4,6 @@ import re
 from multiprocessing import cpu_count, Pool
 from typing import List, Tuple
 from dataclasses import dataclass
-from bson.objectid import ObjectId
 
 
 @dataclass
@@ -21,12 +20,12 @@ class Terms:
 @dataclass
 class CardIndex:
     term: str
-    posting: List[Tuple[ObjectId, int]]  # Posting
+    posting: List[Tuple[str, int]]  # Posting
 
 
 @dataclass
 class Card:
-    _id: ObjectId
+    uuid: str
     text: str
 
 
@@ -49,30 +48,31 @@ def parse_card_text(text: str) -> Terms:
     return terms
 
 
-def generate_card_index(card_id: ObjectId, terms: Terms) -> CardIndex:
+def generate_card_index(card_uuid: str, terms: Terms) -> CardIndex:
     card_index = {}
 
     for term, positions in terms.items():
-        posting = (card_id, len(positions))
+        posting = (card_uuid, len(positions))
         card_index[term] = posting
 
     return card_index
 
 
-def generate_card_frequencies(card_id: ObjectId, terms):
+def generate_card_frequencies(card_uuid: str, terms):
     card_frequencies = {}
 
     for term, positions in terms.items():
         card_frequencies[term] = len(positions)
 
-    return (card_id, card_frequencies)
+    return (card_uuid, card_frequencies)
 
 
-def mapper(card: Card):
+def mapper(card_data):
+    card_uuid, card_text = card_data
     try:
-        terms = parse_card_text(card["text"])
-        card_frequencies = generate_card_frequencies(card["_id"], terms)
-        card_index = generate_card_index(card["_id"], terms)
+        terms = parse_card_text(card_text)
+        card_frequencies = generate_card_frequencies(card_uuid, terms)
+        card_index = generate_card_index(card_uuid, terms)
         return (card_index, card_frequencies)
     except Exception as error:
         return None
@@ -147,8 +147,8 @@ class Indexer:
 
         return similarity_scores
 
-    def retrieve(self, source_card: Card):
-        source_card_terms = parse_card_text(source_card["text"])
+    def retrieve(self, card_text: str):
+        source_card_terms = parse_card_text(card_text)
 
         cards_data = {}
 
@@ -178,5 +178,5 @@ class Indexer:
 
         similarity_scores = self.calculate_similarity_scores(cards_data)
         return dict(
-            sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True)[:10]
+            sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True)[:40]
         )
