@@ -1,3 +1,4 @@
+import asyncio
 import pytest
 
 from app.indexer import (
@@ -7,51 +8,40 @@ from app.indexer import (
     generate_inverted_index,
     Indexer,
 )
-from bson.objectid import ObjectId
 
 GENERIC_TEST_DATA = [
-    {
-        "_id": "d1",
-        "text": "To do is to be.\nTo be is to do.",
-    },
-    {
-        "_id": "d2",
-        "text": "To be or not to be.\nI am what I am",
-    },
-    {
-        "_id": "d3",
-        "text": "I think therefore I am.\nDo be do be do.",
-    },
-    {
-        "_id": "d4",
-        "text": "Do do do, da da da.\nLet it be, let it be.",
-    },
+    ("d1", "To do is to be.\nTo be is to do."),
+    ("d2", "To be or not to be.\nI am what I am"),
+    ("d3", "I think therefore I am.\nDo be do be do."),
+    ("d4", "Do do do, da da da.\nLet it be, let it be."),
 ]
 
+CARD_TEST_DATA = [("card_id", "{T}: Add {1}{1}")]
 
-CARD_TEST_DATA = [{"_id": ObjectId(), "text": "{T}: Add {1}{1}"}]
+
+pytest_plugins = "pytest_asyncio"
 
 
 @pytest.mark.parametrize(
     ("text_input", "expected"),
     (
         (
-            GENERIC_TEST_DATA[0]["text"],
+            GENERIC_TEST_DATA[0][1],
             ["to", "do", "is", "to", "be", "to", "be", "is", "to", "do"],
         ),
         (
-            GENERIC_TEST_DATA[1]["text"],
+            GENERIC_TEST_DATA[1][1],
             ["to", "be", "or", "not", "to", "be", "i", "am", "what", "i", "am"],
         ),
         (
-            GENERIC_TEST_DATA[2]["text"],
+            GENERIC_TEST_DATA[2][1],
             ["i", "think", "therefore", "i", "am", "do", "be", "do", "be", "do"],
         ),
         (
-            GENERIC_TEST_DATA[3]["text"],
+            GENERIC_TEST_DATA[3][1],
             ["do", "do", "do", "da", "da", "da", "let", "it", "be", "let", "it", "be"],
         ),
-        (CARD_TEST_DATA[0]["text"], ["{t}", "add", "{1}", "{1}"]),
+        (CARD_TEST_DATA[0][1], ["{t}", "add", "{1}", "{1}"]),
     ),
 )
 def test_tokenize(text_input, expected):
@@ -62,7 +52,7 @@ def test_tokenize(text_input, expected):
     ("text_input", "expected"),
     (
         (
-            GENERIC_TEST_DATA[0]["text"],
+            GENERIC_TEST_DATA[0][1],
             {
                 "to": [0, 3, 5, 8],
                 "do": [1, 9],
@@ -70,7 +60,7 @@ def test_tokenize(text_input, expected):
                 "be": [4, 6],
             },
         ),
-        (CARD_TEST_DATA[0]["text"], {"{t}": [0], "add": [1], "{1}": [2, 3]}),
+        (CARD_TEST_DATA[0][1], {"{t}": [0], "add": [1], "{1}": [2, 3]}),
     ),
 )
 def test_parse_card_text(text_input, expected):
@@ -158,15 +148,16 @@ def test_generate_card_index(card_id, terms, expected):
         ),
     ),
 )
-def test_generate_inverted_index(data_iter, expected):
-    assert generate_inverted_index(data_iter) == expected
+@pytest.mark.asyncio
+async def test_generate_inverted_index(data_iter, expected):
+    assert await generate_inverted_index(data_iter) == expected
 
 
 @pytest.mark.parametrize(
     ("query", "expected"),
     (
         (
-            {"_id": "some_id", "text": "to do"},
+            "to do",
             (
                 {
                     "d1": 0.660,
@@ -178,7 +169,8 @@ def test_generate_inverted_index(data_iter, expected):
         ),
     ),
 )
-def test_retrieval(query, expected):
-    inverted_index, cards_frequencies = generate_inverted_index(GENERIC_TEST_DATA)
+@pytest.mark.asyncio
+async def test_retrieval(query, expected):
+    inverted_index, cards_frequencies = await generate_inverted_index(GENERIC_TEST_DATA)
     indexer = Indexer(inverted_index, cards_frequencies)
     assert indexer.retrieve(query) == expected
