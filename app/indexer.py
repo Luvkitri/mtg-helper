@@ -177,6 +177,4 @@ class Indexer:
                 cards_data[card_id] = [(source_term_weight, card_term_weight)]
 
         similarity_scores = self.calculate_similarity_scores(cards_data)
-        return dict(
-            sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True)[:40]
-        )
+        return dict(sorted(similarity_scores.items(), key=lambda x: x[1], reverse=True))
