@@ -2,6 +2,12 @@ from typing import List
 
 
 def iter_levenshtein_distance(first: str, second: str):
+    if len(first) < len(second):
+        return iter_levenshtein_distance(second, first)
+
+    if len(second) == 0:
+        return len(first)
+
     previous_row = list(range(len(second) + 1))
     current_row = list(range(len(second) + 1))
 
