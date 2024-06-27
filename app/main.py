@@ -1,15 +1,9 @@
-import json
-
-from pprint import pprint
 from contextlib import asynccontextmanager
-from Levenshtein import distance
 
 import aiosqlite
 
-# from typing_extensions import Annotated
-# # from bson import json_util, ObjectId
-from autocomplete import Trie, levenshtein_distance
-from fastapi import Depends, FastAPI, HTTPException
+from autocomplete import Trie, iter_levenshtein_distance
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from indexer import Indexer, generate_inverted_index
@@ -21,13 +15,16 @@ lifespans = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db = await aiosqlite.connect("data/AllPrintings.sqlite")
-    # sql_query = """SELECT cards.name, identifier.scryfallId FROM cardIdentifiers as identifier INNER JOIN cards ON identifier.uuid = cards.uuid GROUP BY cards.name;"""
-    sql_query = """SELECT uuid, name, text FROM cards WHERE (isFunny = 0 OR isFunny IS NULL) AND (isOversized = 0 OR isOversized IS NULL) AND (isOnlineOnly = 0 OR isOnlineOnly IS NULL) AND (isFullArt = 0 OR isFullArt IS NULL) AND (isAlternative = 0 or isAlternative IS NULL) AND (setCode != "REX" AND setCode != "SLD" AND setCode != "40K") GROUP BY name"""
-    # query_card_identifiers_info = """PRAGMA table_info(cardIdentifiers);"""
-
-    # query_cards_info = """PRAGMA table_info(cards)"""
-    # cards_table_info_cursor = await db.execute(query_cards_info)
-    # cards_table_info = await cards_table_info_cursor.fetchall()
+    sql_query = """
+        SELECT uuid, name, text FROM cards 
+        WHERE (isFunny = 0 OR isFunny IS NULL) 
+        AND (isOversized = 0 OR isOversized IS NULL) 
+        AND (isOnlineOnly = 0 OR isOnlineOnly IS NULL) 
+        AND (isFullArt = 0 OR isFullArt IS NULL) 
+        AND (isAlternative = 0 or isAlternative IS NULL) 
+        AND (setCode != "REX" AND setCode != "SLD" AND setCode != "40K") 
+        GROUP BY name
+    """
 
     cards_cursor = await db.execute(sql_query)
     cards = await cards_cursor.fetchall()
@@ -65,13 +62,6 @@ app.add_middleware(
 )
 
 
-class PaginationQueryParameters:
-    def __init__(self, page: int = 1, skip: int = 0, limit: int = 10):
-        self.page = page
-        self.skip = skip
-        self.limit = limit
-
-
 @app.get("/")
 async def root():
     return None
@@ -105,13 +95,7 @@ async def get_similar_cards_by_uuid(card_uuid: str, limit: int = 10, offset: int
 
     card_uuid, card_text, card_color_identity, card_colors, card_types = card
 
-    print(card_color_identity)
-    print(card_colors)
-    print(card_types)
-
     sim_scores = lifespans["indexer"].retrieve(card_text)
-
-    print(list(sim_scores.values())[:50])
 
     db_cursor = await lifespans["db"].cursor()
     await db_cursor.execute("""
@@ -173,7 +157,9 @@ async def get_completations(q: str | None = None):
 
     search_query = q.lower()
     results = lifespans["cards_names_trie"].auto_complete(search_query)[:10]
-    sorted_results = sorted({result: distance(result, q) for result in results})
+    sorted_results = sorted(
+        {result: iter_levenshtein_distance(result, q) for result in results}
+    )
     return {
         str(lifespans["card_name_to_upper"][match][0]): lifespans["card_name_to_upper"][
             match

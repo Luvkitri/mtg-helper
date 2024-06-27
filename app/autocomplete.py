@@ -1,6 +1,28 @@
 from typing import List
 
 
+def iter_levenshtein_distance(first: str, second: str):
+    previous_row = list(range(len(second) + 1))
+    current_row = list(range(len(second) + 1))
+
+    for i in range(len(first)):
+        current_row[0] = i + 1
+
+        for j in range(len(second)):
+            insertion_cost = previous_row[j + 1] + 1
+            deletion_cost = current_row[j] + 1
+            substitution_cost = previous_row[j]
+
+            if first[i] != second[j]:
+                substitution_cost = previous_row[j] + 1
+
+            current_row[j + 1] = min(deletion_cost, insertion_cost, substitution_cost)
+
+        previous_row, current_row = current_row, previous_row
+
+    return previous_row[-1]
+
+
 def tail(s: str):
     return s[1:]
 
