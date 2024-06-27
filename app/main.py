@@ -1,11 +1,9 @@
 from contextlib import asynccontextmanager
 
 import aiosqlite
-
 from autocomplete import Trie, iter_levenshtein_distance
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-
 from indexer import Indexer, generate_inverted_index
 from models.card import Card
 

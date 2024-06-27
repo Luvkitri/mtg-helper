@@ -74,7 +74,7 @@ def mapper(card_data):
         card_frequencies = generate_card_frequencies(card_uuid, terms)
         card_index = generate_card_index(card_uuid, terms)
         return (card_index, card_frequencies)
-    except Exception as error:
+    except Exception:
         return None
 
 
