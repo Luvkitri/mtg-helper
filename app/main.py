@@ -1,18 +1,18 @@
 from contextlib import asynccontextmanager
 
 import aiosqlite
-from autocomplete import Trie, iter_levenshtein_distance
+from app.autocomplete import Trie, iter_levenshtein_distance
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from indexer import Indexer, generate_inverted_index
-from models.card import Card
+from app.indexer import Indexer, generate_inverted_index
+from app.models.card import Card
 
 lifespans = {}
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db = await aiosqlite.connect("data/AllPrintings.sqlite")
+    db = await aiosqlite.connect("app/data/AllPrintings.sqlite")
     sql_query = """
         SELECT uuid, name, text FROM cards 
         WHERE (isFunny = 0 OR isFunny IS NULL) 

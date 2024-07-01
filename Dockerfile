@@ -8,4 +8,6 @@ RUN pip install --no-cache-dir --upgrade -r /mtg-helper/requirements.txt
 
 COPY ./app /mtg-helper/app
 
-CMD ["fastapi", "run", "app/main.py", "--port", "80"]
+RUN cd /mtg-helper/app
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "80"]
