@@ -1,6 +1,8 @@
 from contextlib import asynccontextmanager
 
 import aiosqlite
+import time
+import random
 from app.autocomplete import Trie, iter_levenshtein_distance
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -95,14 +97,18 @@ async def get_similar_cards_by_uuid(card_uuid: str, limit: int = 10, offset: int
 
     sim_scores = lifespans["indexer"].retrieve(card_text)
 
+    temp_table_name = f"temp_{int(time.time() + (random.random() * 100_000))}"
+
     db_cursor = await lifespans["db"].cursor()
-    await db_cursor.execute("""
-                                CREATE TEMPORARY TABLE temp_similar_cards (uuid TEXT, sim_score REAL)
-                            """)
+    await db_cursor.execute(
+        f"""
+                                CREATE TEMPORARY TABLE {temp_table_name} (uuid TEXT, sim_score REAL)
+                            """,
+    )
     for uuid, sim_score in sim_scores.items():
         await db_cursor.execute(
-            """
-                              INSERT INTO temp_similar_cards (uuid, sim_score) VALUES (?, ?)
+            f"""
+                              INSERT INTO {temp_table_name} (uuid, sim_score) VALUES (?, ?)
                           """,
             (
                 uuid,
@@ -110,10 +116,10 @@ async def get_similar_cards_by_uuid(card_uuid: str, limit: int = 10, offset: int
             ),
         )
 
-    similar_cards_query = """
+    similar_cards_query = f"""
         SELECT card.uuid, identifier.scryfallId, temp_card.sim_score
         FROM cards AS card
-        INNER JOIN temp_similar_cards AS temp_card
+        INNER JOIN {temp_table_name} AS temp_card
         ON card.uuid = temp_card.uuid
         INNER JOIN cardIdentifiers AS identifier
         ON card.uuid = identifier.uuid
@@ -134,7 +140,7 @@ async def get_similar_cards_by_uuid(card_uuid: str, limit: int = 10, offset: int
     )
     similar_cards = await similar_cards_cursor.fetchall()
 
-    await db_cursor.execute("DROP TABLE temp_similar_cards")
+    await db_cursor.execute(f"DROP TABLE {temp_table_name}")
     await lifespans["db"].commit()
 
     return {
