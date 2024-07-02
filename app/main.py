@@ -12,7 +12,7 @@ lifespans = {}
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    db = await aiosqlite.connect("app/data/AllPrintings.sqlite")
+    db = await aiosqlite.connect("./app/data/AllPrintings.sqlite")
     sql_query = """
         SELECT uuid, name, text FROM cards 
         WHERE (isFunny = 0 OR isFunny IS NULL) 
@@ -48,7 +48,7 @@ async def lifespan(app: FastAPI):
     lifespans.clear()
 
 
-origins = ["http://localhost:5173"]
+origins = ["*"]
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
