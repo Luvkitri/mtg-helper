@@ -1,3 +1,15 @@
+from enum import Enum
+
+
+class CardField(Enum):
+    ALL = "*"
+    UUID = "uuid"
+    TEXT = "text"
+    COLOR_IDENTITY = "colorIdentity"
+    COLORS = "colors"
+    TYPES = "types"
+
+
 class Card:
     def __init__(
         self,

@@ -1,9 +1,8 @@
 import math
 import re
-
-from multiprocessing import cpu_count, Pool
-from typing import List, Tuple
 from dataclasses import dataclass
+from multiprocessing import Pool, cpu_count
+from typing import List, Tuple
 
 
 @dataclass

@@ -1,13 +1,16 @@
+# import random
+# import time
 from contextlib import asynccontextmanager
 
 import aiosqlite
-import time
-import random
-from app.autocomplete import Trie, iter_levenshtein_distance
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+
+import app.crud as crud
+from app.autocomplete import Trie, iter_levenshtein_distance
+from app.constants import MAX_LIMIT, MAX_OFFSET
 from app.indexer import Indexer, generate_inverted_index
-from app.models.card import Card
+from app.models.card import Card, CardField
 
 lifespans = {}
 
@@ -15,19 +18,7 @@ lifespans = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     db = await aiosqlite.connect("./app/data/AllPrintings.sqlite")
-    sql_query = """
-        SELECT uuid, name, text FROM cards 
-        WHERE (isFunny = 0 OR isFunny IS NULL) 
-        AND (isOversized = 0 OR isOversized IS NULL) 
-        AND (isOnlineOnly = 0 OR isOnlineOnly IS NULL) 
-        AND (isFullArt = 0 OR isFullArt IS NULL) 
-        AND (isAlternative = 0 or isAlternative IS NULL) 
-        AND (setCode != "REX" AND setCode != "SLD" AND setCode != "40K") 
-        GROUP BY name
-    """
-
-    cards_cursor = await db.execute(sql_query)
-    cards = await cards_cursor.fetchall()
+    cards = await crud.get_unique_cards(db)
 
     card_name_to_upper = {
         card_name.lower(): (card_uuid, card_name) for card_uuid, card_name, _ in cards
@@ -50,7 +41,7 @@ async def lifespan(app: FastAPI):
     lifespans.clear()
 
 
-origins = ["*"]
+origins = ["http://localhost:5173"]
 
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(
@@ -67,81 +58,69 @@ async def root():
     return None
 
 
-@app.get("/cards/{card_uuid}")
-async def get_card_by_uuid(card_uuid: str):
-    card_by_id_query = """SELECT * FROM cards WHERE uuid = ?"""
-    card_cursor = await lifespans["db"].execute(card_by_id_query, (card_uuid,))
-    card = await card_cursor.fetchone()
-
+@app.get("/cards/{uuid}")
+async def get_card_by_uuid(uuid: str):
+    card = await crud.get_card_by_uuid(lifespans["db"], uuid)
     if card is None:
         raise HTTPException(status_code=404, detail="Card not found")
 
     return Card(*card).__dict__
 
 
-@app.get("/cards/similar/{card_uuid}")
-async def get_similar_cards_by_uuid(card_uuid: str, limit: int = 10, offset: int = 0):
-    if not isinstance(offset, int) or offset % 10 != 0:
+@app.get("/cards/similar/{uuid}")
+async def get_similar_cards_by_uuid(
+    uuid: str,
+    limit: int = 10,
+    offset: int = 0,
+    filter_color: bool = False,
+    filter_type: bool = False,
+):
+    print(filter_color, filter_type)
+    if (
+        (not isinstance(limit, int) or limit % 10 != 0 or limit > MAX_LIMIT)
+        and (not isinstance(offset, int) or offset % 10 != 0 or offset > MAX_OFFSET)
+        and not isinstance(filter_color, bool)
+        and not isinstance(filter_type, bool)
+    ):
         raise HTTPException(status_code=404, detail="Wrong pagination parameter")
 
-    card_by_id_query = (
-        """SELECT uuid, text, colorIdentity, colors, types FROM cards WHERE uuid = ?"""
+    card = await crud.get_card_by_uuid(
+        lifespans["db"],
+        uuid,
+        [
+            CardField.UUID,
+            CardField.TEXT,
+            CardField.COLOR_IDENTITY,
+            CardField.COLORS,
+            CardField.TYPES,
+        ],
     )
-    card_cursor = await lifespans["db"].execute(card_by_id_query, (card_uuid,))
-    card = await card_cursor.fetchone()
 
     if card is None:
         raise HTTPException(status_code=404, detail="Card not found")
 
-    card_uuid, card_text, card_color_identity, card_colors, card_types = card
+    card = Card(**card)
 
-    sim_scores = lifespans["indexer"].retrieve(card_text)
+    if (
+        card.uuid is None
+        or card.text is None
+        or card.colorIdentity is None
+        or card.colors is None
+        or card.types is None
+    ):
+        raise HTTPException(status_code=404, detail="Missing card data")
 
-    temp_table_name = f"temp_{int(time.time() + (random.random() * 100_000))}"
+    sim_scores = lifespans["indexer"].retrieve(card.text)
 
-    db_cursor = await lifespans["db"].cursor()
-    await db_cursor.execute(
-        f"""
-                                CREATE TEMPORARY TABLE {temp_table_name} (uuid TEXT, sim_score REAL)
-                            """,
+    params = (
+        card.colorIdentity,
+        card.colors,
+        card.types,
+        limit,
+        offset,
     )
-    for uuid, sim_score in sim_scores.items():
-        await db_cursor.execute(
-            f"""
-                              INSERT INTO {temp_table_name} (uuid, sim_score) VALUES (?, ?)
-                          """,
-            (
-                uuid,
-                sim_score,
-            ),
-        )
 
-    similar_cards_query = f"""
-        SELECT card.uuid, identifier.scryfallId, temp_card.sim_score
-        FROM cards AS card
-        INNER JOIN {temp_table_name} AS temp_card
-        ON card.uuid = temp_card.uuid
-        INNER JOIN cardIdentifiers AS identifier
-        ON card.uuid = identifier.uuid
-        WHERE (card.colorIdentity = ? OR card.colors = ?) AND card.types = ?
-        ORDER BY temp_card.sim_score DESC
-        LIMIT ?
-        OFFSET ?
-    """
-    similar_cards_cursor = await lifespans["db"].execute(
-        similar_cards_query,
-        (
-            card_color_identity,
-            card_colors,
-            card_types,
-            limit,
-            offset,
-        ),
-    )
-    similar_cards = await similar_cards_cursor.fetchall()
-
-    await db_cursor.execute(f"DROP TABLE {temp_table_name}")
-    await lifespans["db"].commit()
+    similar_cards = await crud.get_similar_cards(lifespans["db"], params, sim_scores)
 
     return {
         "data": [
