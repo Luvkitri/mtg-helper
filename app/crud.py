@@ -50,8 +50,6 @@ async def get_similar_cards(
             ),
         )
 
-    print(source_card.__dict__)
-
     condition = ""
     if filter_color and filter_type:
         condition = f"WHERE (card.colorIdentity = '{source_card.colorIdentity}' OR card.colors = '{source_card.colors}') AND card.types = '{source_card.types}'"
@@ -59,8 +57,6 @@ async def get_similar_cards(
         condition = f"WHERE card.colorIdentity = '{source_card.colorIdentity}' OR card.colors = '{source_card.colors}'"
     elif filter_type:
         condition = f"WHERE card.types = '{source_card.types}'"
-
-    print(condition)
 
     similar_cards_query = f"""
         SELECT card.uuid, identifier.scryfallId, temp_card.sim_score
@@ -75,7 +71,6 @@ async def get_similar_cards(
         OFFSET ?
     """
 
-    print(similar_cards_query)
     similar_cards_cursor = await db.execute(similar_cards_query, params)
     similar_cards = await similar_cards_cursor.fetchall()
 
