@@ -32,7 +32,9 @@ async def get_card_by_uuid(db, uuid: str, fields: List[CardField] = [CardField.A
     return {field.value: value for field, value in zip(fields, card)}
 
 
-async def get_similar_cards(db, params, sim_scores):
+async def get_similar_cards(
+    db, filter_color: bool, filter_type: bool, source_card, params, sim_scores
+):
     temp_table_name = f"temp_{int(time.time() + (random.random() * 100_000))}"
 
     db_cursor = await db.cursor()
@@ -48,6 +50,18 @@ async def get_similar_cards(db, params, sim_scores):
             ),
         )
 
+    print(source_card.__dict__)
+
+    condition = ""
+    if filter_color and filter_type:
+        condition = f"WHERE (card.colorIdentity = '{source_card.colorIdentity}' OR card.colors = '{source_card.colors}') AND card.types = '{source_card.types}'"
+    elif filter_color:
+        condition = f"WHERE card.colorIdentity = '{source_card.colorIdentity}' OR card.colors = '{source_card.colors}'"
+    elif filter_type:
+        condition = f"WHERE card.types = '{source_card.types}'"
+
+    print(condition)
+
     similar_cards_query = f"""
         SELECT card.uuid, identifier.scryfallId, temp_card.sim_score
         FROM cards AS card
@@ -55,11 +69,13 @@ async def get_similar_cards(db, params, sim_scores):
         ON card.uuid = temp_card.uuid
         INNER JOIN cardIdentifiers AS identifier
         ON card.uuid = identifier.uuid
-        WHERE (card.colorIdentity = ? OR card.colors = ?) AND card.types = ?
+        {condition}
         ORDER BY temp_card.sim_score DESC
         LIMIT ?
         OFFSET ?
     """
+
+    print(similar_cards_query)
     similar_cards_cursor = await db.execute(similar_cards_query, params)
     similar_cards = await similar_cards_cursor.fetchall()
 

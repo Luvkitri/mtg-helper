@@ -84,7 +84,7 @@ async def get_similar_cards_by_uuid(
     ):
         raise HTTPException(status_code=404, detail="Wrong pagination parameter")
 
-    card = await crud.get_card_by_uuid(
+    source_card = await crud.get_card_by_uuid(
         lifespans["db"],
         uuid,
         [
@@ -96,31 +96,30 @@ async def get_similar_cards_by_uuid(
         ],
     )
 
-    if card is None:
+    if source_card is None:
         raise HTTPException(status_code=404, detail="Card not found")
 
-    card = Card(**card)
+    source_card = Card(**source_card)
 
     if (
-        card.uuid is None
-        or card.text is None
-        or card.colorIdentity is None
-        or card.colors is None
-        or card.types is None
+        source_card.uuid is None
+        or source_card.text is None
+        or source_card.colorIdentity is None
+        or source_card.colors is None
+        or source_card.types is None
     ):
         raise HTTPException(status_code=404, detail="Missing card data")
 
-    sim_scores = lifespans["indexer"].retrieve(card.text)
+    sim_scores = lifespans["indexer"].retrieve(source_card.text)
 
     params = (
-        card.colorIdentity,
-        card.colors,
-        card.types,
         limit,
         offset,
     )
 
-    similar_cards = await crud.get_similar_cards(lifespans["db"], params, sim_scores)
+    similar_cards = await crud.get_similar_cards(
+        lifespans["db"], filter_color, filter_type, source_card, params, sim_scores
+    )
 
     return {
         "data": [
