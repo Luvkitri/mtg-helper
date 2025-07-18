@@ -73,9 +73,10 @@ async def get_similar_cards_by_uuid(
     limit: int = 10,
     offset: int = 0,
     filter_color: bool = False,
+    filter_colors: bool = False,
     filter_type: bool = False,
 ):
-    print(filter_color, filter_type)
+    print(filter_color, filter_colors, filter_type)
     if (
         (not isinstance(limit, int) or limit % 10 != 0 or limit > MAX_LIMIT)
         and (not isinstance(offset, int) or offset % 10 != 0 or offset > MAX_OFFSET)
@@ -118,7 +119,13 @@ async def get_similar_cards_by_uuid(
     )
 
     similar_cards = await crud.get_similar_cards(
-        lifespans["db"], filter_color, filter_type, source_card, params, sim_scores
+        lifespans["db"],
+        filter_color,
+        filter_colors,
+        filter_type,
+        source_card,
+        params,
+        sim_scores,
     )
 
     return {
@@ -128,7 +135,7 @@ async def get_similar_cards_by_uuid(
         ],
         "limit": limit,
         "offset": offset,
-        "total": 50,
+        "total": 100,
     }
 
 

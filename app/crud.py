@@ -33,7 +33,13 @@ async def get_card_by_uuid(db, uuid: str, fields: List[CardField] = [CardField.A
 
 
 async def get_similar_cards(
-    db, filter_color: bool, filter_type: bool, source_card, params, sim_scores
+    db,
+    filter_color: bool,
+    filter_colors: bool,
+    filter_type: bool,
+    source_card,
+    params,
+    sim_scores,
 ):
     temp_table_name = f"temp_{int(time.time() + (random.random() * 100_000))}"
 
@@ -51,10 +57,16 @@ async def get_similar_cards(
         )
 
     condition = ""
+
     if filter_color and filter_type:
         condition = f"WHERE (card.colorIdentity = '{source_card.colorIdentity}' OR card.colors = '{source_card.colors}') AND card.types = '{source_card.types}'"
     elif filter_color:
         condition = f"WHERE card.colorIdentity = '{source_card.colorIdentity}' OR card.colors = '{source_card.colors}'"
+    elif filter_colors:
+        colors = source_card.colors.split(",")
+        conditions = [f"card.colors='{color.strip()}'" for color in colors]
+        condition = f"WHERE {" OR ".join(conditions)}"
+        print(condition)
     elif filter_type:
         condition = f"WHERE card.types = '{source_card.types}'"
 

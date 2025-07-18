@@ -21,3 +21,13 @@ levenshtein distance of current query and possible result.
 
 Simple example of this API usage can be found here:
 [https://github.com/Luvkitri/mtg-helper-frontend-example](https://github.com/Luvkitri/mtg-helper-frontend-example)
+
+
+## Running it locally
+
+### Update/Get the data
+Run the `get_data.sh` script to download the latest AllPrintings database.
+
+```sh
+./scripts/get_data.sh
+```
